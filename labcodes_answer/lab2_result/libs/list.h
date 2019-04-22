@@ -14,6 +14,8 @@
  * directly rather than using the generic single-entry routines.
  * */
 
+//8个字节，包含两个指针
+//每个指针指向一个8字节的list_entry结构
 struct list_entry {
     struct list_entry *prev, *next;
 };

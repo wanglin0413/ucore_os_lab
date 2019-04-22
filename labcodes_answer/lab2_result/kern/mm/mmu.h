@@ -201,9 +201,11 @@ struct taskstate {
 // use PGADDR(PDX(la), PTX(la), PGOFF(la)).
 
 // page directory index
+//右移22位后，取最后10位——取前10位
 #define PDX(la) ((((uintptr_t)(la)) >> PDXSHIFT) & 0x3FF)
 
 // page table index
+//右移12位后，取最后10位——取10~19，中间10位
 #define PTX(la) ((((uintptr_t)(la)) >> PTXSHIFT) & 0x3FF)
 
 // page number field of address

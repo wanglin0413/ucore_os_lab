@@ -44,6 +44,7 @@ seta20.2:
     outb %al, $0x60
 
 probe_memory:
+#为什么放在0x8000？探测前能确定的有哪些？
     movl $0, 0x8000
     xorl %ebx, %ebx
     movw $0x8004, %di

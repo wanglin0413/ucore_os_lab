@@ -189,11 +189,13 @@ nr_free_pages(void) {
 /* pmm_init - initialize the physical memory management */
 static void
 page_init(void) {
+    //之前写在0x8000处，现在访问0到4m的空间时，要用虚拟地址访问
     struct e820map *memmap = (struct e820map *)(0x8000 + KERNBASE);
     uint64_t maxpa = 0;
 
     cprintf("e820map:\n");
     int i;
+    //统计所有的物理内存，使得maxpa=最大的地址
     for (i = 0; i < memmap->nr_map; i ++) {
         uint64_t begin = memmap->map[i].addr, end = begin + memmap->map[i].size;
         cprintf("  memory: %08llx, [%08llx, %08llx], type = %d.\n",
@@ -204,20 +206,30 @@ page_init(void) {
             }
         }
     }
+    //支持最多0x38000000（寻址空间，即使中间有些不能用，也需要对应的page数据结构），896MB的物理地址（）
+    //todo 验证这里最大的到底是多少？
     if (maxpa > KMEMSIZE) {
         maxpa = KMEMSIZE;
     }
 
     extern char end[];
-
+    //0~maxpa的物理空间，其页数为npage=32766
     npage = maxpa / PGSIZE;
+    //pages = 0xc011b000
+    //end = 0xc011af28
+    //pages是管理物理内存页的数据结构Page数组的起始地址
+    //表示所有的物理页描述符放在虚拟地址pages处
     pages = (struct Page *)ROUNDUP((void *)end, PGSIZE);
 
+    //设置所有的物理页为reserved（通过page数据结构中的flags对应位）
     for (i = 0; i < npage; i ++) {
         SetPageReserved(pages + i);
     }
 
+    //现在的物理内存从低到高是：内核代码，0-end（中间有一段是页目录），page数组（npage*sizeOf（page））
+    //freemem的值是物理地址，表示page描述符数组后的可用物理地址
     uintptr_t freemem = PADDR((uintptr_t)pages + sizeof(struct Page) * npage);
+
 
     for (i = 0; i < memmap->nr_map; i ++) {
         uint64_t begin = memmap->map[i].addr, end = begin + memmap->map[i].size;
@@ -232,6 +244,10 @@ page_init(void) {
                 begin = ROUNDUP(begin, PGSIZE);
                 end = ROUNDDOWN(end, PGSIZE);
                 if (begin < end) {
+                    //pa2page 通过物理地址，找到在页表中对应的索引pages[n]的地址
+                    //init_memmap，第一个参数为这段连续物理内存对应的page数据结构的起始位置
+                    //第二个参数为这段连续的物理内存的页数
+                    //将这段连续内存设为可用，且初始化flags，property等，将第一个page描述符的property设为n，并且加到free_area链表中
                     init_memmap(pa2page(begin), (end - begin) / PGSIZE);
                 }
             }
@@ -246,11 +262,16 @@ page_init(void) {
 //  pa:   physical address of this memory
 //  perm: permission of this memory  
 static void
+//la为kernelbase， size为kmemsize，pa为0
 boot_map_segment(pde_t *pgdir, uintptr_t la, size_t size, uintptr_t pa, uint32_t perm) {
     assert(PGOFF(la) == PGOFF(pa));
+    //n为所有可用物理内存的页数，跟npages一样
     size_t n = ROUNDUP(size + PGOFF(la), PGSIZE) / PGSIZE;
+    //la为虚拟地址起始
     la = ROUNDDOWN(la, PGSIZE);
+    //pa为物理地址起始
     pa = ROUNDDOWN(pa, PGSIZE);
+    //将0xC*后的896MB的虚拟地址，对应到0~896M的物理地址
     for (; n > 0; n --, la += PGSIZE, pa += PGSIZE) {
         pte_t *ptep = get_pte(pgdir, la, 1);
         assert(ptep != NULL);
@@ -275,6 +296,8 @@ boot_alloc_page(void) {
 void
 pmm_init(void) {
     // We've already enabled paging
+    //PADDR方法返回的是物理地址
+    //用boot_cr3记录页目录的虚拟地址
     boot_cr3 = PADDR(boot_pgdir);
 
     //We need to alloc/free the physical memory (granularity is 4KB or other size). 
@@ -282,6 +305,8 @@ pmm_init(void) {
     //First we should init a physical memory manager(pmm) based on the framework.
     //Then pmm can alloc/free the physical memory. 
     //Now the first_fit/best_fit/worst_fit/buddy_system pmm are available.
+
+    //初始化free_area结构，还没有初始化真正的可用物理页表
     init_pmm_manager();
 
     // detect physical memory space, reserve already used memory,
@@ -297,10 +322,12 @@ pmm_init(void) {
 
     // recursively insert boot_pgdir in itself
     // to form a virtual page table at virtual address VPT
+    //paddr返回boot_pgdir的物理地址
     boot_pgdir[PDX(VPT)] = PADDR(boot_pgdir) | PTE_P | PTE_W;
 
     // map all physical memory to linear memory with base linear addr KERNBASE
     // linear_addr KERNBASE ~ KERNBASE + KMEMSIZE = phy_addr 0 ~ KMEMSIZE
+    //将0xC0000000~0xF8000000的虚拟地址，映射到0~896MB处（实际可用的小于896）
     boot_map_segment(boot_pgdir, KERNBASE, KMEMSIZE, 0, PTE_W);
 
     // Since we are using bootloader's GDT,
@@ -325,7 +352,12 @@ pmm_init(void) {
 //  create: a logical value to decide if alloc a page for PT
 // return vaule: the kernel virtual address of this pte
 pte_t *
+//获取某虚拟地址对应的页表项的虚拟地址
 get_pte(pde_t *pgdir, uintptr_t la, bool create) {
+    //1. 先根据前10位找到对应的页目录
+    //2. 看页目录项中present位是否为1，为1说明已经有对应页表，为0说明没有
+    //3. 如果还没有页表项，则从可用物理内存中分配1页，将分配的用作页表的物理页的物理地址设置到页目录项中
+    //4. 最后返回该虚拟地址la对应的页表中的对应的项的虚拟地址
     /* LAB2 EXERCISE 2: YOUR CODE
      *
      * If you need to visit a physical address, please use KADDR()
@@ -359,17 +391,26 @@ get_pte(pde_t *pgdir, uintptr_t la, bool create) {
     }
     return NULL;          // (8) return page table entry
 #endif
+    //pdt_t 是unsign的32位
+    //找到这个虚拟地址在页目录中对应的页目录项
     pde_t *pdep = &pgdir[PDX(la)];
+    //PET_P表示是否present，页表是否存在
     if (!(*pdep & PTE_P)) {
         struct Page *page;
+        //如果当前页表不存在，则从可用物理内存中分配一页，用作页表
         if (!create || (page = alloc_page()) == NULL) {
             return NULL;
         }
         set_page_ref(page, 1);
+        //page2pa，可用通过page的物理地址，得到这个物理页的物理地址
         uintptr_t pa = page2pa(page);
+        //是将该页内容初始化为0
+        //KADDR是将物理地址转换为虚拟地址
         memset(KADDR(pa), 0, PGSIZE);
+        //将页目录项内容设置为虚拟地址的页表项的起始物理地址
         *pdep = pa | PTE_U | PTE_W | PTE_P;
     }
+    //最后返回的就是该虚拟地址对应的页表中的对应的项的值，也就是对应物理页的起始地址
     return &((pte_t *)KADDR(PDE_ADDR(*pdep)))[PTX(la)];
 }
 
@@ -612,6 +653,7 @@ void
 print_pgdir(void) {
     cprintf("-------------------- BEGIN --------------------\n");
     size_t left, right = 0, perm;
+    //vpd是页目录的起始虚拟地址
     while ((perm = get_pgtable_items(0, NPDEENTRY, right, vpd, &left, &right)) != 0) {
         cprintf("PDE(%03x) %08x-%08x %08x %s\n", right - left,
                 left * PTSIZE, right * PTSIZE, (right - left) * PTSIZE, perm2str(perm));

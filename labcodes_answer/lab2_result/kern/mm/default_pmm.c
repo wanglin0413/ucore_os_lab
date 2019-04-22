@@ -100,6 +100,8 @@ free_area_t free_area;
 
 static void
 default_init(void) {
+//free_list是一个常量，表示free_area的free_list参数
+//将这个参数的地址传给list_init函数
     list_init(&free_list);
     nr_free = 0;
 }
@@ -114,6 +116,7 @@ default_init_memmap(struct Page *base, size_t n) {
         set_page_ref(p, 0);
     }
     base->property = n;
+    //指示property位可用
     SetPageProperty(base);
     nr_free += n;
     list_add_before(&free_list, &(base->page_link));

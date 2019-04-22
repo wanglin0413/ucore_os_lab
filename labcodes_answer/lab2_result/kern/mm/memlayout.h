@@ -63,6 +63,9 @@
  * table, which maps all the PTEs (Page Table Entry) containing the page mappings
  * for the entire virtual address space into that 4 Meg region starting at VPT.
  * */
+//页目录和所有的页表的物理页面，按顺序被映射到一段连续（从VPT开始）的虚拟地址空间
+//所以，当需要获取某个页目录或页表项的值时，直接访问其虚拟地址，就可以得到
+//否则的话，需要
 #define VPT                 0xFAC00000
 
 #define KSTACKPAGE          2                           // # of pages in kernel stack

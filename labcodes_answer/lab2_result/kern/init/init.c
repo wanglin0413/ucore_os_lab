@@ -8,14 +8,17 @@
 #include <clock.h>
 #include <intr.h>
 #include <pmm.h>
+#include <kmonitor.h>
 
 int kern_init(void) __attribute__((noreturn));
-
+void grade_backtrace(void);
 static void lab1_switch_test(void);
 
 int
 kern_init(void) {
+    //edata表示内核代码结束处，end表示内核数据段结束处，在ld时指定
     extern char edata[], end[];
+    //edata到end段为bss段，初始化为0
     memset(edata, 0, end - edata);
 
     cons_init();                // init the console

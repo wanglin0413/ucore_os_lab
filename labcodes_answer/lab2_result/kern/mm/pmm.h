@@ -50,6 +50,7 @@ void print_pgdir(void);
  * where the machine's maximum 256MB of physical memory is mapped and returns the
  * corresponding physical address.  It panics if you pass it a non-kernel virtual address.
  * */
+//返回kva的物理地址
 #define PADDR(kva) ({                                                   \
             uintptr_t __m_kva = (uintptr_t)(kva);                       \
             if (__m_kva < KERNBASE) {                                   \
@@ -80,6 +81,8 @@ page2ppn(struct Page *page) {
 }
 
 static inline uintptr_t
+//page-pages就是在pages中page的索引，也就对应了物理内存中页的索引
+//所以再左移12位，就是对应的物理地址
 page2pa(struct Page *page) {
     return page2ppn(page) << PGSHIFT;
 }
