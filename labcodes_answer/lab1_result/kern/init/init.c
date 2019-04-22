@@ -14,6 +14,8 @@ void grade_backtrace(void);
 static void lab1_switch_test(void);
 
 void
+//加载到地址0x100000处
+//为什么这里的esp还是0x7bc0呢
 kern_init(void){
     extern char edata[], end[];
     memset(edata, 0, end - edata);
@@ -23,12 +25,13 @@ kern_init(void){
     const char *message = "(THU.CST) os is loading ...";
     cprintf("%s\n\n", message);
 
+    //看一下这里打出的是什么
     print_kerninfo();
 
     grade_backtrace();
 
     pmm_init();                 // init physical memory management
-
+    //初始化中断控制器
     pic_init();                 // init interrupt controller
     idt_init();                 // init interrupt descriptor table
 

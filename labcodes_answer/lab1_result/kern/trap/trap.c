@@ -144,9 +144,12 @@ print_regs(struct pushregs *regs) {
 }
 
 /* temporary trapframe or pointer to trapframe */
+//带* 的，是指针类型，32位，是一个内存地址
 struct trapframe switchk2u, *switchu2k;
 
 /* trap_dispatch - dispatch based on what type of trap occurred */
+//tf是一个指针类型（存放在0x7b28），32位，0x7b28处存储着一个trapframe结构的起始地址0x7b4c
+//0x7b4c开始就是一个trapframe数据
 static void
 trap_dispatch(struct trapframe *tf) {
     char c;
@@ -178,6 +181,7 @@ trap_dispatch(struct trapframe *tf) {
             switchk2u = *tf;
             switchk2u.tf_cs = USER_CS;
             switchk2u.tf_ds = switchk2u.tf_es = switchk2u.tf_ss = USER_DS;
+            //这里的esp就是tf中特权级由用户态到内核态时，压栈的esp和ss的起始位置
             switchk2u.tf_esp = (uint32_t)tf + sizeof(struct trapframe) - 8;
 		
             // set eflags, make sure ucore can use io under user mode.
@@ -186,6 +190,9 @@ trap_dispatch(struct trapframe *tf) {
 		
             // set temporary stack
             // then iret will jump to the right stack
+            //tf是一个指针，其内存位置为0x7b28，该内存位置的值为0x7b4c（tf结构的起始地址）
+            //这个语句将0x7b4c-4=0x7b48处的值改为switchk2u结构的起始地址0x10f920
+            //是将最初传的tf参数改成switchk2u，后面pop esp，就可以将后面的pop 弹出switchk2u中的值了
             *((uint32_t *)tf - 1) = (uint32_t)&switchk2u;
         }
         break;
@@ -194,9 +201,15 @@ trap_dispatch(struct trapframe *tf) {
             tf->tf_cs = KERNEL_CS;
             tf->tf_ds = tf->tf_es = KERNEL_DS;
             tf->tf_eflags &= ~FL_IOPL_MASK;
+            //tf目前在stack0栈中
+            //是一个指针，大约在10f96c处（int后的内核临时栈中），然后这个地址处，存放用户调用int时的esp - tf结构的大小
             switchu2k = (struct trapframe *)(tf->tf_esp - (sizeof(struct trapframe) - 8));
+            //并将tf中的内容复制到7c00处（int前的栈）的栈中
             memmove(switchu2k, tf, sizeof(struct trapframe) - 8);
+            //pop esp时，esp变为stack0处的switchu2k起始位置
             *((uint32_t *)tf - 1) = (uint32_t)switchu2k;
+            //接下来会pop 一些寄存器，pop出来的就是刚修改的寄存器的值
+
         }
         break;
     case IRQ_OFFSET + IRQ_IDE1:

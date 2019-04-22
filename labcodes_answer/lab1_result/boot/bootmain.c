@@ -85,6 +85,8 @@ readseg(uintptr_t va, uint32_t count, uint32_t offset) {
 void
 bootmain(void) {
     // read the 1st page off disk
+    //先读取8个磁盘扇区，是文件头的内容，从头开始读（起始是从1扇区，因为0扇区是引导程序）
+    //读到0x10000处
     readseg((uintptr_t)ELFHDR, SECTSIZE * 8, 0);
 
     // is this a valid ELF?
@@ -95,14 +97,17 @@ bootmain(void) {
     struct proghdr *ph, *eph;
 
     // load each program segment (ignores ph flags)
+    //读取各个段的内容，都在文件头中记录了段应该加载到内存中的什么位置，段的大小，以及段在文件中的偏移
     ph = (struct proghdr *)((uintptr_t)ELFHDR + ELFHDR->e_phoff);
     eph = ph + ELFHDR->e_phnum;
     for (; ph < eph; ph ++) {
+        //&0xFFFFFF是为了不超过段的长度limit
         readseg(ph->p_va & 0xFFFFFF, ph->p_memsz, ph->p_offset);
     }
 
     // call the entry point from the ELF header
     // note: does not return
+    //加载到内存地址0x10000中，这里是直接跳转，因此ebp的值为0，跳转到kernel_init处
     ((void (*)(void))(ELFHDR->e_entry & 0xFFFFFF))();
 
 bad:

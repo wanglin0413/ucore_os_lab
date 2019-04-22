@@ -66,9 +66,15 @@ protcseg:
     movw %ax, %ss                                   # -> SS: Stack Segment
 
     # Set up the stack pointer and call into C. The stack region is from 0--start(0x7c00)
+    #系统程序栈的起始
     movl $0x0, %ebp
+    #start为7c00，boot程序的栈段就是从0x7c00，在这里面增长减少
     movl $start, %esp
+    #栈底初始化为0x7c00
+    #call指令，会把cs和ip入栈，执行完后，esp-4，变成0x7bfc，并且此处的4个字节为7c4f，即返回地址，call的下一条指令地址
+    #但此处不应该返回
     call bootmain
+    #call之后，在执行bootmain函数之前，编译器，会把原始ebp入栈，0x0，然后ebp为新的栈顶，即0x7bfc-4=0x7bf8，然后就开始执行函数代码了
 
     # If bootmain returns (it shouldn't), loop.
 spin:
@@ -76,11 +82,20 @@ spin:
 
 # Bootstrap GDT
 .p2align 2                                          # force 4 byte alignment
-gdt:
-    SEG_NULLASM                                     # null seg
+gdt: #段描述符表 0x7c54， 一共24个字节
+    SEG_NULLASM            #一个段描述符8个字节   # null seg
     SEG_ASM(STA_X|STA_R, 0x0, 0xffffffff)           # code seg for bootloader and kernel
     SEG_ASM(STA_W, 0x0, 0xffffffff)                 # data seg for bootloader and kernel
 
-gdtdesc:
+gdtdesc: #0x7c54 + 24字节 = 0x7c6c
     .word 0x17                                      # sizeof(gdt) - 1
-    .long gdt                                       # address gdt
+    .long gdt    #0x7c56，值是54 7c          # address gdt
+
+#内存地址是以字节8位为单位， word是2字节， long是4字节
+
+#bootasm和bootmain在磁盘引导扇区中——第一个扇区
+#bios读取第一个扇区，放在内存0x7c00处，即 本汇编的start入口函数处
+#gdt和gdtdesc是数据区
+#gdt是段描述符表  0x7c54
+#gdtdesc是要放到GDTR寄存器中的内容 0-15位是段描述符表的大小， 16-48位是段描述符表的起始地址即gdt的内存地址
+#call bootmain bootmain在0x7d00， 它前面是read_seg等代码

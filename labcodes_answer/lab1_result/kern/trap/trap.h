@@ -48,6 +48,7 @@
 #define T_SWITCH_TOK                121    // user/kernel switch
 
 /* registers as pushed by pushal */
+//32字节
 struct pushregs {
     uint32_t reg_edi;
     uint32_t reg_esi;
@@ -58,9 +59,10 @@ struct pushregs {
     uint32_t reg_ecx;
     uint32_t reg_eax;
 };
-
+//76字节
 struct trapframe {
-    struct pushregs tf_regs;
+    struct pushregs tf_regs;//32字节
+    //下面44字节
     uint16_t tf_gs;
     uint16_t tf_padding0;
     uint16_t tf_fs;

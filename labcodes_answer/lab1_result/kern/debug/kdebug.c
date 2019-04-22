@@ -302,19 +302,40 @@ print_stackframe(void) {
       *           NOTICE: the calling funciton's return addr eip  = ss:[ebp+4]
       *                   the calling funciton's ebp = ss:[ebp]
       */
-    uint32_t ebp = read_ebp(), eip = read_eip();
 
+    //ebp寄存器中的值就是当前函数栈帧的栈底地址——一个函数一变化
+    // esp寄存器中的值，就是整个线程地址空间的栈顶———一个函数内变化n次，每次调用push和pop后变化
+    // esp的值会随着函数执行，随着局部变量的压栈或出栈而变化
+    //ebp在一个函数执行过程中，值不变
+    //一个函数（test）的栈帧（调用second）的结构及内容——从栈底开始：
+    // --------------------------------------------------------------------------
+              //上一个函数的ebp的值----------------------------  test的栈底
+             //test的局部变量
+            // test传给second函数的参数
+                                                                                                                    //<-------------------------这里执行了call second
+            //test的返回地址（call 指令的下一条指令地址） ----------test的栈顶
+  //-------------------------------------------------------------------------------
+            //test的ebp的值（此时 ebp指向这里）--------------second的栈底
+            //second 的局部变量
+
+
+            //获取当前栈帧的ebp，eip
+            //当前ebp的值是一个地址，该地址为一个函数的ebp
+            //ebp的值+32位，是返回地址的地址
+            //ebp的值+64位，是传递的参数的地址
+    uint32_t ebp = read_ebp(), eip = read_eip();
     int i, j;
     for (i = 0; ebp != 0 && i < STACKFRAME_DEPTH; i ++) {
         cprintf("ebp:0x%08x eip:0x%08x args:", ebp, eip);
+        //这里2的单位是双字，32位
         uint32_t *args = (uint32_t *)ebp + 2;
         for (j = 0; j < 4; j ++) {
             cprintf("0x%08x ", args[j]);
         }
         cprintf("\n");
         print_debuginfo(eip - 1);
-        eip = ((uint32_t *)ebp)[1];
-        ebp = ((uint32_t *)ebp)[0];
+        eip = *((uint32_t *)ebp + 1);
+        ebp = *((uint32_t *)ebp);
     }
 }
 

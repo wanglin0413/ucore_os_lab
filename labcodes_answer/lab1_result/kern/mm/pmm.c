@@ -81,6 +81,7 @@ gdt_init(void) {
     ts.ts_ss0 = KERNEL_DS;
 
     // initialize the TSS filed of the gdt
+    //type base limit dpl
     gdt[SEG_TSS] = SEG16(STS_T32A, (uint32_t)&ts, sizeof(ts), DPL_KERNEL);
     gdt[SEG_TSS].sd_s = 0;
 
