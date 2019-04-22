@@ -20,3 +20,10 @@ a.out
 chytesting
 disk0
 *.orig
+labcodes_answer/lab1_result/.idea/
+labcodes/lab1/.idea/modules.xml
+labcodes/lab1/.idea/
+labcodes_answer/lab2_result/cmake-build-debug/
+labcodes_answer/lab2_result/.idea/lab2_result.iml
+labcodes_answer/lab2_result/.idea/
+*CMakeLists.txt
